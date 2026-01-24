@@ -15,7 +15,7 @@ class GeminiClient:
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-2.0-flash-exp",
+        model: str = "gemini-2.5-pro",
         max_retries: int = 3,
         base_retry_delay_ms: int = 1000,
         retry_multiplier: int = 2
