@@ -63,7 +63,7 @@ class ValidatorAgent:
         """
         # Format answer options as lettered list (A, B, C, D, etc.)
         letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-        answer_list = "\n".join([f"{letters[i]}. {answer}" for i, answer in enumerate(question.answer)])
+        answer_list = "\n".join([f"{letters[i]}. {answer.content}" for i, answer in enumerate(question.answers)])
         
         prompt = f"""You are a critical reviewer evaluating answer selections for multiple-choice questions.
 

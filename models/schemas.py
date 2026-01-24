@@ -4,26 +4,32 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 
 
+class AnswerOption(BaseModel):
+    """Model for a single answer option."""
+    content: str
+    isRight: bool = False
+
 class QuestionItem(BaseModel):
     """Model for a multiple-choice question item."""
     
     content: str = Field(..., min_length=1, description="Full question text with context")
     title: str = Field(..., min_length=1, description="Brief question summary")
     type: str = Field(..., description="Question type (e.g., 'option')")
-    answer: List[str] = Field(..., min_length=2, description="Array of possible answers")
+    column: Optional[str] = Field(None, description="Layout column type")
+    answers: List[AnswerOption] = Field(..., min_length=2, description="Array of possible answers")
     questionNumber: str = Field(..., min_length=1, description="Unique identifier for question")
     
-    @field_validator('answer')
+    @field_validator('answers')
     @classmethod
-    def validate_answers(cls, v: List[str]) -> List[str]:
-        """Ensure all answer options are non-empty strings."""
+    def validate_answers(cls, v: List[AnswerOption]) -> List[AnswerOption]:
+        """Ensure all answer options are valid."""
         if not v:
             raise ValueError("Answer list cannot be empty")
         if len(v) < 2:
             raise ValueError("Must have at least 2 answer options")
         for answer in v:
-            if not answer or not answer.strip():
-                raise ValueError("Answer options cannot be empty strings")
+            if not answer.content or not answer.content.strip():
+                raise ValueError("Answer content cannot be empty strings")
         return v
 
 
@@ -31,7 +37,7 @@ class AnswerResult(BaseModel):
     """Model for a question answer result."""
     
     questionNumber: str = Field(..., description="Matches input question number")
-    selectedAnswer: Optional[str] = Field(None, description="The validated answer (if successful)")
+    selectedAnswer: Optional[str] = Field(None, description="The selected answer letter (A, B, C, D, etc.)")
     error: Optional[str] = Field(None, description="Error message (if failed)")
     validationIterations: int = Field(..., ge=0, description="Number of agent iterations")
     processingTimeMs: int = Field(..., ge=0, description="Total processing time in milliseconds")

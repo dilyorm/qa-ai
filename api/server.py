@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
-from models.schemas import QuestionItem, AnswerResult, SimpleAnswerResult, SystemConfig
+from models.schemas import QuestionItem, AnswerResult, SystemConfig
 from workers.question_processor import QuestionProcessor
 from agents.multi_agent_validator import MultiAgentValidator
 from agents.answerer_agent import AnswererAgent
@@ -150,11 +150,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-@app.post("/api/answer-questions", response_model=List[SimpleAnswerResult])
+@app.post("/api/answer-questions", response_model=List[QuestionItem])
 async def answer_questions(
     questions: List[QuestionItem],
     request: Request
-) -> List[SimpleAnswerResult]:
+) -> List[QuestionItem]:
     """
     Process a list of multiple-choice questions through multi-agent validation.
     
@@ -163,7 +163,7 @@ async def answer_questions(
         request: FastAPI request object (for request ID)
         
     Returns:
-        List of SimpleAnswerResult objects with questionNumber and selectedAnswer only
+        List of QuestionItem objects with the correct answer marked as isRight=True
         
     Raises:
         HTTPException: 400 for invalid input, 503 for service unavailable
@@ -193,29 +193,47 @@ async def answer_questions(
         # Process questions through the multi-agent validator
         results = await question_processor.process_questions(questions)
         
-        # Convert to simplified response format (only questionNumber and selectedAnswer)
-        simple_results = []
-        for result in results:
+        # Map results back to questions and update isRight field
+        updated_questions = []
+        letter_to_index = {letter: i for i, letter in enumerate(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'])}
+        
+        # Create a map of results by question number for safer matching
+        results_map = {res.questionNumber: res for res in results}
+        
+        for question in questions:
+            result = results_map.get(question.questionNumber)
+            
+            if not result:
+                logger.error(f"No result found for question {question.questionNumber}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to process question {question.questionNumber}"
+                )
+            
             if result.error:
-                # For errors, we could either skip them or raise an exception
-                # Let's raise an exception for failed questions
                 logger.error(f"Question {result.questionNumber} failed: {result.error}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Question {result.questionNumber} failed: {result.error}"
                 )
             
-            simple_results.append(
-                SimpleAnswerResult(
-                    questionNumber=result.questionNumber,
-                    selectedAnswer=result.selectedAnswer
-                )
-            )
+            # Update the correct answer
+            selected_letter = result.selectedAnswer
+            if selected_letter and selected_letter in letter_to_index:
+                idx = letter_to_index[selected_letter]
+                if 0 <= idx < len(question.answers):
+                    question.answers[idx].isRight = True
+                else:
+                    logger.warning(
+                        f"Selected answer index {idx} out of bounds for question {question.questionNumber}"
+                    )
+            
+            updated_questions.append(question)
         
         # Log response summary
-        logger.info(f"Completed processing {len(simple_results)} questions successfully")
+        logger.info(f"Completed processing {len(updated_questions)} questions successfully")
         
-        return simple_results
+        return updated_questions
         
     except HTTPException:
         # Re-raise HTTP exceptions as-is
